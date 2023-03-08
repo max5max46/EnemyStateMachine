@@ -32,9 +32,9 @@ public class PlayerController : MonoBehaviour
     bool sprintPressed;
     bool jumpPressed;
     bool crouchPressed;
+    bool firePressed;
 
-    //RaycastHit hit;
-    //bool didPlayerRaycastDownHit;
+    RaycastHit hit;
 
     // Start is called before the first frame update
     void Start()
@@ -58,16 +58,12 @@ public class PlayerController : MonoBehaviour
         sprintPressed = false;
         jumpPressed = false;
         crouchPressed = false;
+        firePressed = false;
     }
 
 
     private void Update()
     {
-        //didPlayerRaycastDownHit = false;
-
-        //if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, 3, ~6))
-        //    didPlayerRaycastDownHit = true;
-
         //grabs player input and stores it
         if (Input.GetKey(KeyCode.W))
             upPressed = true;
@@ -89,12 +85,25 @@ public class PlayerController : MonoBehaviour
 
         if (Input.GetKey(KeyCode.LeftControl))
             crouchPressed = true;
+
+        if (Input.GetKeyDown(KeyCode.Mouse0))
+            firePressed = true;
     }
 
     // Update is called once per frame
     void FixedUpdate()
     {
-        noise = 0.5f;
+        noise = 0.7f;
+
+
+        if (firePressed)
+        {
+            firePressed = false;
+            if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, 50, ~6))
+                if (hit.collider.gameObject.name == "Enemy")
+                    hit.collider.gameObject.GetComponentInParent<EnemyController>().TakeDamage();
+        }
+
 
         //set acceleration and max speed back to normal after sprint
         acceleration = accelerationBaseValue;
@@ -116,7 +125,7 @@ public class PlayerController : MonoBehaviour
         if (isGrounded && crouchPressed && !sprintPressed)
         {
             crouchPressed = false;
-            noise = 0.1f;
+            noise = 0.2f;
             maxSpeed = maxSpeed * crouchMultiplier;
             acceleration = acceleration * crouchMultiplier;
             playerCamera.transform.position = new Vector3(playerCamera.transform.position.x, Mathf.Lerp(playerCamera.transform.position.y , transform.position.y, Time.deltaTime * 10), playerCamera.transform.position.z);

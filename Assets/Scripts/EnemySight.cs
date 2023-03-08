@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class EnemySight : MonoBehaviour
 {
-    bool playerSpotted = false;
+    public bool playerSpotted = false;
 
     private void OnTriggerEnter(Collider other)
     {
