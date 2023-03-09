@@ -213,8 +213,9 @@ MonoBehaviour:
   isGrounded: 0
   acceleration: 3
   maxSpeed: 4
-  jumpStrength: 20
+  jumpStrength: 13
   sprintMultiplier: 1.6
+  crouchMultiplier: 0.8
 --- !u!54 &9007273636562638812
 Rigidbody:
   m_ObjectHideFlags: 0

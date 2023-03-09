@@ -32,9 +32,7 @@ public class PlayerController : MonoBehaviour
     bool sprintPressed;
     bool jumpPressed;
     bool crouchPressed;
-    bool firePressed;
 
-    RaycastHit hit;
 
     // Start is called before the first frame update
     void Start()
@@ -58,7 +56,6 @@ public class PlayerController : MonoBehaviour
         sprintPressed = false;
         jumpPressed = false;
         crouchPressed = false;
-        firePressed = false;
     }
 
 
@@ -85,25 +82,13 @@ public class PlayerController : MonoBehaviour
 
         if (Input.GetKey(KeyCode.LeftControl))
             crouchPressed = true;
-
-        if (Input.GetKeyDown(KeyCode.Mouse0))
-            firePressed = true;
     }
 
     // Update is called once per frame
     void FixedUpdate()
     {
-
+        //set noise to default value (walking)
         noise = 0.7f;
-
-        if (firePressed)
-        {
-            firePressed = false;
-            if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, 50, ~6))
-                if (hit.collider.gameObject.name == "Enemy")
-                    hit.collider.gameObject.GetComponentInParent<EnemyController>().TakeDamage();
-        }
-
 
         //set acceleration and max speed back to normal after sprint
         acceleration = accelerationBaseValue;
@@ -187,7 +172,7 @@ public class PlayerController : MonoBehaviour
         jumpPressed = false;
 
         //if standing still make "no noise"
-        if (rb.velocity.x < 0.1f && rb.velocity.z < 0.1f)
+        if ((rb.velocity.x < 0.1f && rb.velocity.x > -0.1f) && (rb.velocity.z < 0.1f && rb.velocity.z > -0.1f) || !isGrounded)
             noise = 0.05f;
 
         //DEBUG: check total x y speed
