@@ -9,7 +9,6 @@ public class PlayerController : MonoBehaviour
     //isGrounded is used by the jumpTrigger Script
     public bool isGrounded;
     
-    public float noise;
 
     public float acceleration;
     public float maxSpeed;
@@ -24,6 +23,7 @@ public class PlayerController : MonoBehaviour
     float maxSpeedBaseValue;
     float moveLeftRight;
     float moveForwardBackward;
+    float noise;
 
     bool upPressed;
     bool downPressed;
@@ -93,8 +93,8 @@ public class PlayerController : MonoBehaviour
     // Update is called once per frame
     void FixedUpdate()
     {
-        noise = 0.7f;
 
+        noise = 0.7f;
 
         if (firePressed)
         {
@@ -110,7 +110,7 @@ public class PlayerController : MonoBehaviour
         maxSpeed = maxSpeedBaseValue;
 
         //If sprint is input up the accelertion and speed as well as change fov
-        if (sprintPressed && !crouchPressed)
+        if (sprintPressed && !crouchPressed && (upPressed || leftPressed || rightPressed))
         {
             sprintPressed = false;
             noise = 1f;
@@ -128,7 +128,7 @@ public class PlayerController : MonoBehaviour
             noise = 0.2f;
             maxSpeed = maxSpeed * crouchMultiplier;
             acceleration = acceleration * crouchMultiplier;
-            playerCamera.transform.position = new Vector3(playerCamera.transform.position.x, Mathf.Lerp(playerCamera.transform.position.y , transform.position.y, Time.deltaTime * 10), playerCamera.transform.position.z);
+            playerCamera.transform.position = new Vector3(playerCamera.transform.position.x, Mathf.Lerp(playerCamera.transform.position.y , transform.position.y + 0.2f, Time.deltaTime * 10), playerCamera.transform.position.z);
             transform.GetComponent<CapsuleCollider>().height = 1;
             transform.GetComponent<CapsuleCollider>().center = new Vector3 (0, -0.5f, 0);
         }
@@ -185,12 +185,16 @@ public class PlayerController : MonoBehaviour
             rb.AddForce(new Vector3(0.0f, jumpStrength, 0.0f), ForceMode.Impulse);
 
         jumpPressed = false;
-        
+
+        //if standing still make "no noise"
+        if (rb.velocity.x < 0.1f && rb.velocity.z < 0.1f)
+            noise = 0.05f;
+
         //DEBUG: check total x y speed
         //Debug.Log(Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)));
 
         //DEBUG: check Noise level
-        Debug.Log(noise);
+        //Debug.Log(noise);
     }
 
     //Takes a Y rotation and sets the player's camera to that direction
@@ -198,5 +202,20 @@ public class PlayerController : MonoBehaviour
     {
         transform.rotation = Quaternion.Euler(0, yRotation, 0);
         playerCamera.GetComponent<CameraController>().xRotation = 0;
+    }
+
+    //gives player postition but helps account for crouching
+    public Vector3 GetPosition()
+    {
+        if (isGrounded && crouchPressed && !sprintPressed)
+            return (transform.position + new Vector3(0, -0.5f, 0));
+        else
+            return (transform.position + new Vector3(0, 0.5f, 0));
+    }
+
+    //just gives noise value
+    public float GetNoise()
+    {
+        return noise;
     }
 }

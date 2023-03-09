@@ -5,29 +5,46 @@ using UnityEngine.AI;
 
 public class EnemyController : MonoBehaviour
 {
-    enum State {patrolling, chasing, searching}
+    //all public set Variables
     public enum PatrolType {loop, backAndForth, stationary}
+    [Header("Enemy Setting")]
+    public PatrolType enemyPatrolType = PatrolType.loop;
+    [Header("Enemy Debug")]
+    public bool AreEnemyPatrolPointsVisable = false;
+    public bool isVisionConeVisable = false;
+    public bool isSoundDetectionRangeVisable = false;
+    [Header("Important: Must Fill In")]
+    public PlayerController playerScript;
     
-    public PatrolType enemyPatrolType;
-    public GameObject player;
+
+
+    enum State {patrolling, chasing, searching, retreating, attacking}
+    enum SearchingLookDirection {right, left, forward}
 
     GameObject enemyObject;
     NavMeshAgent agent;
 
+    //patrol point Variables
     int numberOfPatrolPoints;
     int currentPatrolPoint;
     Vector3 currentPatrolPosition;
+        //used for back and forth patrol type
+        bool goingForward;
 
     State enemyState;
 
-    bool goingForward;
+    //enemy sightcone Variables
+    Quaternion enemyLookDirection;
+    float enemyLookConstant;
+    float enemyLookSpeed;
 
-    public GameObject detectionSphere;
-    public GameObject sightCone;
+
+
+    GameObject soundDetectionSphere;
+    GameObject sightCone;
 
     float timer;
-    int lookingAround;
-    float enemyLookConstant;
+    SearchingLookDirection lookingAround;
 
     int health;
 
@@ -37,31 +54,44 @@ public class EnemyController : MonoBehaviour
     void Start()
     {
         enemyObject = transform.GetChild(1).gameObject;
+        soundDetectionSphere = enemyObject.transform.GetChild(0).gameObject;
+        sightCone = transform.GetChild(2).gameObject;
+
+
         agent = enemyObject.GetComponent<NavMeshAgent>();
-        enemyState = State.patrolling;
-        currentPatrolPoint = 0;
         health = 5;
 
+        enemyLookSpeed = 10;
+        enemyState = State.patrolling;
+        currentPatrolPoint = 0;
         goingForward = true;
-
         numberOfPatrolPoints = transform.GetChild(0).transform.childCount;
-
         agent.SetDestination(transform.GetChild(0).transform.GetChild(currentPatrolPoint).transform.position);
 
-        for (int i = 0; i < numberOfPatrolPoints; i++)
-        {
-            transform.GetChild(0).transform.GetChild(i).transform.gameObject.SetActive(false);
-        }
+        if (!AreEnemyPatrolPointsVisable)
+            for (int i = 0; i < numberOfPatrolPoints; i++)
+                transform.GetChild(0).transform.GetChild(i).transform.gameObject.SetActive(false);
+
+        if (!isSoundDetectionRangeVisable)
+            soundDetectionSphere.SetActive(false);
+
+        if (!isVisionConeVisable)
+            sightCone.GetComponent<MeshRenderer>().enabled = false;
+
     }
 
     // Update is called once per frame
     void Update()
     {
+        sightCone.transform.position = enemyObject.transform.position + new Vector3 (0, 0.3f, 0);
 
-        detectionSphere.transform.localScale = new Vector3 (1, 1, 1) * 12 * 2 * player.GetComponent<PlayerController>().noise;
+        if (isSoundDetectionRangeVisable)
+            soundDetectionSphere.transform.localScale = new Vector3 (1, 1, 1) * 12 * 2 * playerScript.GetNoise();
 
         currentPatrolPosition = transform.GetChild(0).transform.GetChild(currentPatrolPoint).transform.position;
+
         
+
         //The State Machine itself
         switch (enemyState)
         {
@@ -71,16 +101,16 @@ public class EnemyController : MonoBehaviour
                 enemyObject.GetComponent<MeshRenderer>().material.color = Color.green;
 
                 //if the Enemy hears a noise they'll look at it
-                if (Vector3.Distance(enemyObject.transform.position, player.transform.position) < 12 * player.GetComponent<PlayerController>().noise)
-                    sightCone.transform.rotation = Quaternion.Slerp(sightCone.transform.rotation, Quaternion.LookRotation(player.transform.position - sightCone.transform.position), Time.deltaTime * 10);
+                if (Vector3.Distance(enemyObject.transform.position, playerScript.GetPosition()) < 12 * playerScript.GetNoise())
+                    enemyLookDirection = Quaternion.LookRotation(playerScript.GetPosition() - sightCone.transform.position);
                 else
-                    sightCone.transform.rotation = Quaternion.Slerp(sightCone.transform.rotation, Quaternion.Euler(0, enemyObject.transform.localRotation.eulerAngles.y, 0), Time.deltaTime * 10);
+                    enemyLookDirection = Quaternion.Euler(0, enemyObject.transform.rotation.eulerAngles.y, 0);
 
                 //Checks to see if the player has been spotted
                 if (sightCone.GetComponent<EnemySight>().playerSpotted)
                 {
                     RaycastHit hit;
-                    if (Physics.Raycast(sightCone.transform.position, player.transform.position - sightCone.transform.position, out hit, 20))
+                    if (Physics.Raycast(sightCone.transform.position, playerScript.GetPosition() - sightCone.transform.position, out hit, 20))
                         if (hit.collider.gameObject.CompareTag("Player"))
                         {
                             enemyState = State.chasing;
@@ -147,17 +177,22 @@ public class EnemyController : MonoBehaviour
                 timer -= Time.deltaTime;
 
                 //sight cone looks towards player
-                sightCone.transform.rotation = Quaternion.Slerp(sightCone.transform.rotation, Quaternion.LookRotation(player.transform.position - sightCone.transform.position), Time.deltaTime * 10);
+                enemyLookDirection = Quaternion.LookRotation(playerScript.GetPosition() - sightCone.transform.position);
+
+                if (Vector3.Distance(enemyObject.transform.position, playerScript.GetPosition()) < 6)
+                {
+                    enemyState = State.attacking;
+                }
 
                 //if player is still in sight keep chasing (reset timer)
                 if (sightCone.GetComponent<EnemySight>().playerSpotted)
                 {
                     RaycastHit hit;
-                    if (Physics.Raycast(sightCone.transform.position, player.transform.position - sightCone.transform.position, out hit, 20))
+                    if (Physics.Raycast(sightCone.transform.position, playerScript.GetPosition() - sightCone.transform.position, out hit, 20))
                         if (hit.collider.gameObject.CompareTag("Player"))
                         {
                             timer = 3;
-                            agent.SetDestination(player.transform.position);
+                            agent.SetDestination(playerScript.GetPosition());
                         }
                 }
 
@@ -167,13 +202,24 @@ public class EnemyController : MonoBehaviour
                     enemyState = State.searching;
 
                     //setup Variables for next state
-                    lookingAround = 1;
+                    lookingAround = SearchingLookDirection.right;
                     timer = 2;
                     enemyLookConstant = enemyObject.transform.rotation.eulerAngles.y;
-                    lastKnownPlayerPosition = player.transform.position;
+                    lastKnownPlayerPosition = playerScript.GetPosition();
 
                     agent.SetDestination(lastKnownPlayerPosition);
                 }
+
+                break;
+
+            case State.attacking:
+
+                enemyObject.GetComponent<MeshRenderer>().material.color = Color.black;
+                agent.SetDestination(enemyObject.transform.position);
+                enemyLookDirection = Quaternion.LookRotation(playerScript.GetPosition() - sightCone.transform.position);
+
+                if (Vector3.Distance(enemyObject.transform.position, playerScript.GetPosition()) > 12)
+                    enemyState = State.chasing;
 
                 break;
 
@@ -190,37 +236,38 @@ public class EnemyController : MonoBehaviour
                     //enemy switchs looking states to look left and right
                     switch (lookingAround)
                     {
-                        case 1:
+                        case SearchingLookDirection.right:
                             // turn one direction
-                            enemyObject.transform.rotation = Quaternion.Slerp(enemyObject.transform.rotation, Quaternion.Euler(enemyObject.transform.rotation.eulerAngles.x, enemyLookConstant - 60, enemyObject.transform.rotation.eulerAngles.z), Time.deltaTime * 3);
+                            enemyLookDirection = Quaternion.Euler(0, enemyLookConstant - 60, 0);
+                            enemyLookSpeed = 3;
                             if (timer < 0)
                             {
                                 //next looking state
-                                lookingAround++;
+                                lookingAround = SearchingLookDirection.left;
                                 timer = 2;
                             }
                             break;
 
-                        case 2:
+                        case SearchingLookDirection.left:
                             // turn the other direction
-                            enemyObject.transform.rotation = Quaternion.Slerp(enemyObject.transform.rotation, Quaternion.Euler(enemyObject.transform.rotation.eulerAngles.x, enemyLookConstant + 60, enemyObject.transform.rotation.eulerAngles.z), Time.deltaTime * 3);
+                            enemyLookDirection = Quaternion.Euler(0, enemyLookConstant + 60, 0);
+                            enemyLookSpeed = 3;
                             if (timer < 0)
                             {
                                 //next looking state
-                                lookingAround++;
+                                lookingAround = SearchingLookDirection.forward;
                                 timer = 2;
                             }
                             break;
 
-                        case 3:
+                        case SearchingLookDirection.forward:
                             // look forward
-                            enemyObject.transform.rotation = Quaternion.Slerp(enemyObject.transform.rotation, Quaternion.Euler(enemyObject.transform.rotation.eulerAngles.x, enemyLookConstant, enemyObject.transform.rotation.eulerAngles.z), Time.deltaTime * 3);
+                            enemyLookDirection = Quaternion.Euler(0, enemyLookConstant, 0);
+                            enemyLookSpeed = 3;
                             //if looking finishes, swap back to patrol mode
                             if (timer < 0)
                             {
-                                enemyState = State.patrolling;
-                                currentPatrolPoint = 0;
-                                agent.SetDestination(transform.GetChild(0).transform.GetChild(currentPatrolPoint).transform.position);
+                                enemyState = State.retreating;
                             }
                             break;
                     }
@@ -228,14 +275,23 @@ public class EnemyController : MonoBehaviour
                 else
                 {
                     // makes sure enemy is looking forward
-                    sightCone.transform.rotation = Quaternion.Slerp(sightCone.transform.rotation, Quaternion.Euler(0, enemyObject.transform.localRotation.eulerAngles.y, 0), Time.deltaTime * 10);
+                    enemyLookDirection = Quaternion.Euler(0, enemyObject.transform.localRotation.eulerAngles.y, 0);
+                }
+
+                if (Vector3.Distance(enemyObject.transform.position, playerScript.GetPosition()) < 12 * playerScript.GetNoise())
+                {
+                    lastKnownPlayerPosition = playerScript.GetPosition();
+                    agent.SetDestination(lastKnownPlayerPosition);
+                    enemyLookDirection = Quaternion.Euler(0, enemyObject.transform.localRotation.eulerAngles.y, 0);
+                    lookingAround = SearchingLookDirection.right;
+                    timer = 2;
                 }
 
                 //check to see in player is in sight
                 if (sightCone.GetComponent<EnemySight>().playerSpotted)
                 {
                     RaycastHit hit;
-                    if (Physics.Raycast(sightCone.transform.position, player.transform.position - sightCone.transform.position, out hit, 20))
+                    if (Physics.Raycast(sightCone.transform.position, playerScript.GetPosition() - sightCone.transform.position, out hit, 20))
                         if (hit.collider.gameObject.CompareTag("Player"))
                         {
                             timer = 3;
@@ -244,8 +300,43 @@ public class EnemyController : MonoBehaviour
                 }
 
                 break;
+
+            case State.retreating:
+
+                enemyObject.GetComponent<MeshRenderer>().material.color = Color.cyan;
+
+                enemyLookDirection = Quaternion.Euler(0, enemyObject.transform.localRotation.eulerAngles.y, 0);
+                currentPatrolPoint = 0;
+                agent.SetDestination(transform.GetChild(0).transform.GetChild(currentPatrolPoint).transform.position);
+
+                if (new Vector3(enemyObject.transform.position.x, 0, enemyObject.transform.position.z) == new Vector3(currentPatrolPosition.x, 0, currentPatrolPosition.z))
+                    enemyState = State.patrolling;
+
+                if (sightCone.GetComponent<EnemySight>().playerSpotted)
+                {
+                    RaycastHit hit;
+                    if (Physics.Raycast(sightCone.transform.position, playerScript.GetPosition() - sightCone.transform.position, out hit, 20))
+                        if (hit.collider.gameObject.CompareTag("Player"))
+                        {
+                            timer = 3;
+                            enemyState = State.chasing;
+                        }
+                }
+
+                break;
+
         }
+
+        RotateVisionCone();
+        enemyLookSpeed = 10;
     }
+
+
+    public void RotateVisionCone()
+    {
+        sightCone.transform.rotation = Quaternion.Slerp(sightCone.transform.rotation, enemyLookDirection, Time.deltaTime * enemyLookSpeed);
+    }
+
 
     public void TakeDamage()
     {
