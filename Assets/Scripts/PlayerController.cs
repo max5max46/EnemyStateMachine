@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 using System;
+using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
 {
@@ -16,15 +17,16 @@ public class PlayerController : MonoBehaviour
     public float sprintMultiplier;
     public float crouchMultiplier;
 
-    GameObject playerCamera;
+    GameObject pCamera;
     Rigidbody rb;
-    Camera PlayerCameraComponent;
+    Camera pCameraComponent;
     float accelerationBaseValue;
     float maxSpeedBaseValue;
     float moveLeftRight;
     float moveForwardBackward;
     float noise;
     float timeStamp;
+    float timeStampTwo;
 
     bool upPressed;
     bool downPressed;
@@ -34,8 +36,27 @@ public class PlayerController : MonoBehaviour
     bool jumpPressed;
     bool crouchPressed;
 
+
     bool disableRegularForce;
 
+    float velocityMag;
+
+    public Texture2D standing;
+    public Texture2D crouching;
+    public RawImage man;
+
+    System.Random RNG = new System.Random();
+    float audioTimeDelay;
+    bool overideNextSound;
+
+    enum SoundState {walking, running, sliding, sneaking}
+    SoundState soundState;
+
+    public AudioClip step1;
+    public AudioClip step2;
+    public AudioClip step3;
+    public AudioClip step4;
+    public AudioClip sliding;
 
     // Start is called before the first frame update
     void Start()
@@ -44,15 +65,15 @@ public class PlayerController : MonoBehaviour
         isGrounded = true;
 
         rb = GetComponent<Rigidbody>();
-        playerCamera = transform.GetChild(0).gameObject;
-        PlayerCameraComponent = playerCamera.GetComponent<Camera>();
+        pCamera = transform.GetChild(0).gameObject;
+        pCameraComponent = pCamera.GetComponent<Camera>();
 
         accelerationBaseValue = acceleration;
         maxSpeedBaseValue = maxSpeed;
 
         noise = 0.5f;
 
-        
+        overideNextSound = false;
 
         upPressed = false;
         downPressed = false;
@@ -62,7 +83,7 @@ public class PlayerController : MonoBehaviour
         jumpPressed = false;
         crouchPressed = false;
 
-        disableRegularForce = false;
+        timeStampTwo = Time.time;
     }
 
 
@@ -108,25 +129,26 @@ public class PlayerController : MonoBehaviour
         acceleration = accelerationBaseValue;
         maxSpeed = maxSpeedBaseValue;
 
+        soundState = SoundState.walking;
+
         //If sprint is input, up both accelertion and speed as well as change fov
         if (sprintPressed && !crouchPressed && (upPressed || leftPressed || rightPressed))
         {
             sprintPressed = false;
             noise = 1f;
+            soundState = SoundState.running;
             maxSpeed = maxSpeed * sprintMultiplier;
             acceleration = acceleration * sprintMultiplier;
-            //PlayerCameraComponent.fieldOfView = Mathf.Lerp(PlayerCameraComponent.fieldOfView, 70, Time.deltaTime * 2);
         }
-        else
-            //PlayerCameraComponent.fieldOfView = Mathf.Lerp(PlayerCameraComponent.fieldOfView, 60, Time.deltaTime * 10);
 
         //If crouch is input, lower the camera and Shorten the Collider of the player
-        if (isGrounded && crouchPressed)
+        if (isGrounded && crouchPressed && !jumpPressed)
         {
             crouchPressed = false;
 
             //reduces player and camera height
-            playerCamera.transform.position = new Vector3(playerCamera.transform.position.x, Mathf.Lerp(playerCamera.transform.position.y, transform.position.y + 0.2f, Time.deltaTime * 10), playerCamera.transform.position.z);
+            man.texture = crouching;
+            pCamera.transform.position = new Vector3(pCamera.transform.position.x, Mathf.Lerp(pCamera.transform.position.y, transform.position.y + 0.2f, Time.deltaTime * 10), pCamera.transform.position.z);
             transform.GetComponent<CapsuleCollider>().height = 1;
             transform.GetComponent<CapsuleCollider>().center = new Vector3(0, -0.5f, 0);
 
@@ -135,9 +157,8 @@ public class PlayerController : MonoBehaviour
                 if (timeStamp == 0)
                     timeStamp = Time.time;
 
-                Debug.Log(timeStamp);
-
                 noise = 0.4f;
+                soundState = SoundState.sliding;
 
                 //disable any deceleration
                 disableRegularForce = true;
@@ -149,15 +170,31 @@ public class PlayerController : MonoBehaviour
                     rb.useGravity = false;
                 }
 
+
                 maxSpeed = maxSpeed * sprintMultiplier * 1.2f;
 
-                if (Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) < maxSpeed || timeStamp + 0.7 > Time.time)
-                    rb.AddForce(rb.velocity);
+                if (Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) < maxSpeed)
+                {
+                    if (timeStamp + 0.7 > Time.time)
+                    {
+                        rb.AddRelativeForce(Vector3.forward);
+                    }
+
+                    velocityMag = rb.velocity.magnitude;
+
+                    ////rb.AddForce(-rb.velocity);
+                    rb.velocity = Vector3.zero;
+
+                    rb.velocity = transform.forward * velocityMag;
+                    //rb.AddRelativeForce(Vector3.forward * velocityMag, ForceMode.Impulse);
+
+                }
 
             }
             else
             {
                 noise = 0.2f;
+                soundState = SoundState.sneaking;
                 maxSpeed = maxSpeed * crouchMultiplier;
                 acceleration = acceleration * crouchMultiplier;
             }
@@ -166,7 +203,8 @@ public class PlayerController : MonoBehaviour
         else
         {
             timeStamp = 0;
-            playerCamera.transform.position = new Vector3(playerCamera.transform.position.x, Mathf.Lerp(playerCamera.transform.position.y, transform.position.y + 0.6f, Time.deltaTime * 10), playerCamera.transform.position.z);
+            man.texture = standing;
+            pCamera.transform.position = new Vector3(pCamera.transform.position.x, Mathf.Lerp(pCamera.transform.position.y, transform.position.y + 0.6f, Time.deltaTime * 10), pCamera.transform.position.z);
             transform.GetComponent<CapsuleCollider>().height = 2;
             transform.GetComponent<CapsuleCollider>().center = Vector3.zero;
         }
@@ -177,6 +215,9 @@ public class PlayerController : MonoBehaviour
             sprintPressed = false;
             crouchPressed = false;
         }
+
+        Debug.Log(soundState);
+        SoundManager();
 
         //Resets force Adding Variables to zero for the next add force
         moveForwardBackward = 0;
@@ -226,10 +267,12 @@ public class PlayerController : MonoBehaviour
         if ((rb.velocity.x < 0.1f && rb.velocity.x > -0.1f) && (rb.velocity.z < 0.1f && rb.velocity.z > -0.1f) || !isGrounded)
             noise = 0.05f;
 
-        Debug.Log(Mathf.Clamp01(((float)Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) - 3) / ((maxSpeedBaseValue * sprintMultiplier * 1.2f) - 3)));
+        //Debug.Log(Mathf.Clamp01(((float)Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) - 3) / ((maxSpeedBaseValue * sprintMultiplier * 1.2f) - 3)));
 
-        PlayerCameraComponent.fieldOfView = Mathf.Lerp(PlayerCameraComponent.fieldOfView, 60 + (15 * Mathf.Clamp01(((float) Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) - 2) / ((maxSpeedBaseValue * sprintMultiplier * 1.2f) - 2))), Time.deltaTime * 2);
+        pCameraComponent.fieldOfView = Mathf.Lerp(pCameraComponent.fieldOfView, 60 + (15 * Mathf.Clamp01(((float) Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)) - 2) / ((maxSpeedBaseValue * sprintMultiplier * 1.2f) - 2))), Time.deltaTime * 2);
     
+
+        
 
         //DEBUG: check total x y speed
         //Debug.Log(Math.Sqrt(Math.Pow(rb.velocity.x, 2) + Math.Pow(rb.velocity.z, 2)));
@@ -242,7 +285,7 @@ public class PlayerController : MonoBehaviour
     public void RecenterCamera(float yRotation = 0)
     {
         transform.rotation = Quaternion.Euler(0, yRotation, 0);
-        playerCamera.GetComponent<CameraController>().xRotation = 0;
+        pCamera.GetComponent<CameraController>().xRotation = 0;
     }
 
     //gives player postition but helps account for crouching
@@ -258,5 +301,113 @@ public class PlayerController : MonoBehaviour
     public float GetNoise()
     {
         return noise;
+    }
+
+    public void SoundManager()
+    {
+        audioTimeDelay = 0;
+
+        switch (soundState)
+        {
+            case SoundState.walking:
+
+                if ((upPressed || downPressed || rightPressed || leftPressed) && isGrounded)
+                {
+                    audioTimeDelay = 0.4f;
+                    GetComponent<AudioSource>().volume = 0.42f;
+                    PlaySound(FootSteps());
+                }
+
+                break;
+
+            case SoundState.running:
+
+                if ((upPressed || downPressed || rightPressed || leftPressed) && isGrounded)
+                {
+                    audioTimeDelay = 0.2f;
+                    GetComponent<AudioSource>().volume = 0.5f;
+                    PlaySound(FootSteps());
+                }
+
+                break;
+
+            case SoundState.sneaking:
+
+                if ((upPressed || downPressed || rightPressed || leftPressed) && isGrounded)
+                {
+                    audioTimeDelay = 0.7f;
+                    GetComponent<AudioSource>().volume = 0.26f;
+                    PlaySound(FootSteps());
+                }
+
+                break;
+
+            case SoundState.sliding:
+
+                GetComponent<AudioSource>().volume = 0.42f;
+                if (GetComponent<AudioSource>().clip != sliding)
+                    PlaySound(sliding, true, true);
+
+                //GetComponent<AudioSource>().clip = step1;
+
+                break;
+        }
+
+
+        void PlaySound(AudioClip audioToPlay,  bool overideCurrentSound = false, bool overideNextSound = false)
+        {
+            if (overideNextSound)
+                this.overideNextSound = true;
+
+            if (overideCurrentSound)
+            {
+                GetComponent<AudioSource>().clip = audioToPlay;
+                GetComponent<AudioSource>().Play();
+            }
+            else
+            {
+                if ((!GetComponent<AudioSource>().isPlaying && timeStampTwo + audioTimeDelay < Time.time) || this.overideNextSound)
+                {
+                    timeStampTwo = Time.time;
+                    this.overideNextSound = false;
+                    GetComponent<AudioSource>().clip = audioToPlay;
+                    GetComponent<AudioSource>().Play();
+                }
+            }
+        }
+
+
+        AudioClip FootSteps()
+        {
+            AudioClip stepSoundToPlay = step1;
+            
+            switch (RNG.Next(1,5))
+            {
+                case 1:
+                    stepSoundToPlay = step1;
+                    break;
+
+                case 2:
+                    stepSoundToPlay = step2;
+                    break;
+
+                case 3:
+                    stepSoundToPlay = step3;
+                    break;
+
+                case 4:
+                    stepSoundToPlay = step4;
+                    break;
+            }
+
+            if (stepSoundToPlay == GetComponent<AudioSource>().clip)
+            {
+                stepSoundToPlay = step1;
+                if (stepSoundToPlay == GetComponent<AudioSource>().clip)
+                    stepSoundToPlay = step2;
+            }
+
+            return stepSoundToPlay;
+        }
     }
 }
